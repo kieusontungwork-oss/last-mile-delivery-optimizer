@@ -1,0 +1,39 @@
+services:
+  osrm-backend:
+    image: ghcr.io/project-osrm/osrm-backend
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data/external/osrm:/data
+    command: osrm-routed --algorithm mld --max-table-size 10000 /data/new-york-latest.osrm
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      LMO_OSRM__BASE_URL: http://osrm-backend:5000
+    depends_on:
+      osrm-backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    ports:
+      - "8501:8501"
+    environment:
+      API_BASE_URL: http://api:8000
+    depends_on:
+      - api
+    restart: unless-stopped

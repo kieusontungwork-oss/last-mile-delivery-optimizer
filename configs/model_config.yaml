@@ -1,0 +1,30 @@
+# LightGBM hyperparameters
+lightgbm:
+  n_estimators: 1000
+  max_depth: 8
+  learning_rate: 0.05
+  num_leaves: 127
+  min_child_samples: 20
+  subsample: 0.8
+  colsample_bytree: 0.8
+  early_stopping_rounds: 50
+  eval_metric: mae
+  verbose: -1
+
+# Random Forest baseline
+random_forest:
+  n_estimators: 200
+  max_depth: null
+  n_jobs: -1
+  random_state: 42
+
+# Target column
+target: trip_duration_seconds
+
+# Feature engineering
+features:
+  categorical:
+    - pickup_zone
+    - dropoff_zone
+  rush_hour_morning: [7, 9]
+  rush_hour_evening: [16, 19]
