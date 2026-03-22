@@ -41,6 +41,12 @@ PRESETS = {
 def render():
     st.header("Route Optimization")
 
+    # Initialize session state for results persistence
+    if "opt_result" not in st.session_state:
+        st.session_state.opt_result = None
+    if "opt_depot" not in st.session_state:
+        st.session_state.opt_depot = None
+
     # Sidebar config
     with st.sidebar:
         st.subheader("Configuration")
@@ -97,11 +103,14 @@ def render():
                 result = _poll_job(job_id, timeout=max_solve_time + 10)
 
                 if result["status"] == "completed" and result.get("result"):
-                    _display_results(depot, result["result"])
+                    st.session_state.opt_result = result["result"]
+                    st.session_state.opt_depot = depot
                 elif result["status"] == "failed":
                     st.error(f"Optimization failed: {result.get('error', 'Unknown error')}")
+                    st.session_state.opt_result = None
                 else:
                     st.warning(f"Job status: {result['status']}")
+                    st.session_state.opt_result = None
 
             except requests.ConnectionError:
                 st.error(
@@ -110,8 +119,11 @@ def render():
                 )
             except Exception as e:
                 st.error(f"Error: {e}")
+
+    # Display results or empty map
+    if st.session_state.opt_result and st.session_state.opt_depot:
+        _display_results(st.session_state.opt_depot, st.session_state.opt_result)
     else:
-        # Show empty map
         m = create_empty_map()
         st_folium(m, width=800, height=500)
 

@@ -15,6 +15,12 @@ API_BASE = os.environ.get("API_BASE_URL", "http://localhost:8000")
 def render():
     st.header("Static vs ML-Adjusted Comparison")
 
+    # Initialize session state for results persistence
+    if "cmp_static" not in st.session_state:
+        st.session_state.cmp_static = None
+    if "cmp_ml" not in st.session_state:
+        st.session_state.cmp_ml = None
+
     with st.sidebar:
         st.subheader("Comparison Config")
         num_vehicles = st.number_input("Vehicles", min_value=1, max_value=20, value=3, key="cmp_v")
@@ -51,9 +57,15 @@ def render():
             )
 
         if static_result and ml_result:
-            _display_comparison(depot, static_result, ml_result)
+            st.session_state.cmp_static = static_result
+            st.session_state.cmp_ml = ml_result
         else:
             st.error("One or both optimizations failed. Make sure the API is running.")
+            st.session_state.cmp_static = None
+            st.session_state.cmp_ml = None
+
+    if st.session_state.cmp_static and st.session_state.cmp_ml:
+        _display_comparison(depot, st.session_state.cmp_static, st.session_state.cmp_ml)
 
 
 def _run_optimization(
