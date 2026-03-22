@@ -23,9 +23,11 @@ class OSRMClient:
         self._client.close()
 
     def health_check(self) -> bool:
-        """Check if OSRM server is reachable."""
+        """Check if OSRM server is reachable via a lightweight table query."""
         try:
-            resp = self._client.get(f"{self.base_url}/health")
+            resp = self._client.get(
+                f"{self.base_url}/table/v1/driving/-73.9857,40.7484;-73.9712,40.7831"
+            )
             return resp.status_code == 200
         except httpx.HTTPError:
             return False
