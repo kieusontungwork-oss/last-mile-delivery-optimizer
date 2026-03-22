@@ -12,7 +12,7 @@ for month in 01 06 10; do
     FILE="yellow_tripdata_2023-${month}.parquet"
     if [ ! -f "$RAW_DIR/nyc_tlc/$FILE" ]; then
         echo "Downloading $FILE..."
-        wget -c "${TLC_BASE}/${FILE}" -O "$RAW_DIR/nyc_tlc/$FILE"
+        curl -L -C - -o "$RAW_DIR/nyc_tlc/$FILE" "${TLC_BASE}/${FILE}"
     else
         echo "$FILE already exists, skipping."
     fi
@@ -22,7 +22,7 @@ done
 ZONES_URL="https://d37ci6vzurychx.cloudfront.net/misc/taxi_zones.zip"
 if [ ! -f "$RAW_DIR/nyc_tlc/taxi_zones.zip" ]; then
     echo "Downloading taxi zone shapefile..."
-    wget -c "$ZONES_URL" -O "$RAW_DIR/nyc_tlc/taxi_zones.zip"
+    curl -L -C - -o "$RAW_DIR/nyc_tlc/taxi_zones.zip" "$ZONES_URL"
     unzip -o "$RAW_DIR/nyc_tlc/taxi_zones.zip" -d "$RAW_DIR/nyc_tlc/taxi_zones/"
 fi
 

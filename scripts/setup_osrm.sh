@@ -14,7 +14,7 @@ cd "$OSRM_DIR"
 # Step 1: Download PBF if not present
 if [ ! -f "$PBF_FILE" ]; then
     echo "Downloading NY State OSM data (~463 MB)..."
-    wget -c "$PBF_URL"
+    curl -L -C - -o "$PBF_FILE" "$PBF_URL"
 else
     echo "PBF file already exists, skipping download."
 fi
