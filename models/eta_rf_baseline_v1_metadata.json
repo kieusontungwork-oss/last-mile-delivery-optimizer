@@ -1,0 +1,34 @@
+{
+  "model_type": "RandomForestRegressor",
+  "feature_names": [
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "month",
+    "is_weekend",
+    "is_rush_hour",
+    "pickup_zone",
+    "dropoff_zone",
+    "haversine_distance_km",
+    "bearing",
+    "osrm_base_time_seconds",
+    "osrm_base_distance_m",
+    "avg_speed_mps"
+  ],
+  "categorical_features": [
+    "pickup_zone",
+    "dropoff_zone"
+  ],
+  "training_date": "2026-03-22T15:39:36.385536+00:00",
+  "val_metrics": {
+    "mae_seconds": 264.50751440592285,
+    "mae_minutes": 4.408458573432047,
+    "rmse_seconds": 393.0416273212076,
+    "rmse_minutes": 6.550693788686794,
+    "mape_percent": 34.601628439543454,
+    "r2": 0.7713425854606545,
+    "n_samples": 1421331
+  },
+  "hyperparams": {}
+}

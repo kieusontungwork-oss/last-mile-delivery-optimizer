@@ -1,0 +1,56 @@
+{
+  "model_type": "LGBMRegressor",
+  "feature_names": [
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "month",
+    "is_weekend",
+    "is_rush_hour",
+    "pickup_zone",
+    "dropoff_zone",
+    "haversine_distance_km",
+    "bearing",
+    "osrm_base_time_seconds",
+    "osrm_base_distance_m",
+    "avg_speed_mps"
+  ],
+  "categorical_features": [
+    "pickup_zone",
+    "dropoff_zone"
+  ],
+  "training_date": "2026-03-22T15:38:06.291636+00:00",
+  "val_metrics": {
+    "mae_seconds": 238.2934563955944,
+    "mae_minutes": 3.97155760659324,
+    "rmse_seconds": 356.73565989341085,
+    "rmse_minutes": 5.945594331556848,
+    "mape_percent": 31.122549295370217,
+    "r2": 0.8116345538043902,
+    "n_samples": 1421331
+  },
+  "hyperparams": {
+    "boosting_type": "gbdt",
+    "class_weight": null,
+    "colsample_bytree": 0.8,
+    "importance_type": "split",
+    "learning_rate": 0.05,
+    "max_depth": 8,
+    "min_child_samples": 20,
+    "min_child_weight": 0.001,
+    "min_split_gain": 0.0,
+    "n_estimators": 1000,
+    "n_jobs": null,
+    "num_leaves": 127,
+    "objective": null,
+    "random_state": 42,
+    "reg_alpha": 0.0,
+    "reg_lambda": 0.0,
+    "subsample": 0.8,
+    "subsample_for_bin": 200000,
+    "subsample_freq": 0,
+    "verbose": -1,
+    "device": "gpu"
+  }
+}
