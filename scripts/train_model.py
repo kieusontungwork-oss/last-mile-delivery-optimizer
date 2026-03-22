@@ -51,9 +51,11 @@ def main():
         hyperparams=lgb_model.get_params(),
     )
 
-    # Train Random Forest
+    # Train Random Forest (subsample to avoid OOM on large datasets)
     logger.info("Training Random Forest...")
-    rf_model = train_random_forest(train_df)
+    rf_train_df = train_df.sample(n=min(500_000, len(train_df)), random_state=42)
+    logger.info("RF training on %d samples (subsampled from %d)", len(rf_train_df), len(train_df))
+    rf_model = train_random_forest(rf_train_df)
     rf_metrics = evaluate_model(rf_model, test_df)
 
     save_model(

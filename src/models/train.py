@@ -46,6 +46,7 @@ def train_lightgbm(
         "colsample_bytree": 0.8,
         "verbose": -1,
         "random_state": 42,
+        "device": "gpu",
     }
     if params:
         default_params.update(params)
