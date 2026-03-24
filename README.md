@@ -1,15 +1,105 @@
 # Last-Mile Delivery Optimizer
 
-ML-driven dynamic routing for last-mile delivery optimization. Combines LightGBM ETA prediction with state-of-the-art VRP solvers (PyVRP, OR-Tools) and a local OSRM routing engine to produce delivery routes that adapt to time-of-day congestion patterns.
+An intelligent delivery route planning system that uses machine learning to predict real-world travel times and produce smarter delivery routes. Instead of assuming travel time between two locations is always the same, the system learns from millions of real taxi trips in New York City to understand how traffic patterns change throughout the day — and uses that knowledge to plan better routes.
 
-The core idea: instead of feeding static travel times into a route optimizer, train an ML model on real trip data (NYC TLC) to predict context-aware travel times, build a dynamic cost matrix, and let the VRP solver produce better routes. The ablation between static and ML-adjusted costs shows **10-25% improvement** in total travel time during peak congestion.
+![Web UI Screenshot](image/README/1774195627233.png)
 
-## Architecture
+## Problem Statement
+
+Delivery companies face a persistent challenge: **planning efficient routes in cities where travel times are unpredictable**. A trip that takes 10 minutes at 6 AM can take 35 minutes during rush hour — but most route planning tools treat that trip as the same fixed cost regardless of when it happens.
+
+This "temporal blindness" leads to:
+- **Late deliveries** when routes underestimate rush-hour delays
+- **Wasted time** when routes overestimate travel during off-peak hours
+- **Suboptimal vehicle usage** because the planner cannot account for real traffic patterns
+
+The root cause is that traditional route optimizers work with **static cost estimates** — they use a single average travel time between any two locations, ignoring the time of day, day of week, or seasonal patterns that dramatically affect real-world travel.
+
+## Goals
+
+1. **Build a travel time prediction model** that learns how long trips actually take under different conditions (time of day, day of week, distance, route, etc.) using real historical trip data
+2. **Integrate the prediction model into a route optimizer** so that delivery routes reflect realistic, context-aware travel times instead of static averages
+3. **Quantify the improvement** by comparing routes planned with and without the machine learning model, measuring the real difference in total travel time
+
+## Methodology
+
+### How It Works
+
+The system follows a three-step pipeline: **Predict → Build → Solve**
+
+```
+  Real trip data         Road network        Delivery stops
+  (NYC Taxi trips)       (OpenStreetMap)      & constraints
+       │                      │                     │
+       ▼                      ▼                     ▼
+┌──────────────┐    ┌──────────────────┐   ┌───────────────┐
+│  ML Model    │    │  Routing Engine  │   │ Route Solver  │
+│  (LightGBM)  │───▶│  (OSRM)         │──▶│ (PyVRP /      │
+│              │    │                  │   │  OR-Tools)    │
+└──────────────┘    └──────────────────┘   └───────┬───────┘
+       │                      │                    │
+       ▼                      ▼                    ▼
+  Adjusted travel       Base travel time     Optimized delivery
+  time estimates        & distance matrix    routes per vehicle
+```
+
+**Step 1 — Predict travel times.** A machine learning model (LightGBM) is trained on ~1.4 million real taxi trips from New York City. It learns patterns like "trips heading downtown on a Monday at 8:30 AM take roughly 2× longer than the same trip at 11 PM." Given any origin, destination, and departure time, it predicts how long the trip will actually take.
+
+**Step 2 — Build a cost matrix.** For a set of delivery stops, the system first asks a local road network engine (OSRM) for the baseline driving time between every pair of locations. Then the ML model adjusts each estimate based on the time of day, creating a realistic "cost" for traveling between any two stops. This produces an N×N grid of adjusted travel times.
+
+**Step 3 — Solve the routing problem.** The adjusted cost matrix is fed into a route optimization solver (PyVRP or Google OR-Tools) that figures out the best way to assign stops to vehicles and order them within each route — respecting constraints like vehicle capacity and maximum route duration.
+
+### Data
+
+- **Training data:** NYC Taxi & Limousine Commission trip records — publicly available records of millions of taxi trips with exact pickup/dropoff times, locations, and durations. The model uses three months of 2023 data (~4.3 million trips after filtering).
+- **Road network:** OpenStreetMap data for New York State, processed by OSRM (Open Source Routing Machine) to provide accurate driving directions and travel time estimates.
+- **Benchmarks:** Solomon VRPTW instances — a widely-used standard set of test problems for evaluating route optimization algorithms.
+
+### ML Model
+
+The primary prediction model is **LightGBM** (Light Gradient Boosting Machine), a fast and accurate algorithm well-suited for structured/tabular data. A **Random Forest** model serves as a baseline for comparison.
+
+The model uses 14 input features:
+
+| Category | Features | What they capture |
+|----------|----------|-------------------|
+| Time | Hour (cyclical), day of week (cyclical), month, weekend flag, rush hour flag | When the trip happens |
+| Location | Pickup zone, dropoff zone | Where the trip goes |
+| Distance | Straight-line distance, compass bearing | How far apart the locations are |
+| Road network | OSRM base time, OSRM distance, average speed | What the routing engine estimates |
+
+The most influential features (determined via SHAP analysis) are the OSRM base time, OSRM distance, and straight-line distance — the ML model primarily learns to *correct* the routing engine's estimates based on temporal context.
+
+### Route Optimization Solvers
+
+| Solver | Algorithm | Strength |
+|--------|-----------|----------|
+| **PyVRP** (default) | Hybrid Genetic Search — a competition-winning approach | Best route quality (within ~2% of mathematically optimal solutions) |
+| **OR-Tools** | Google's constraint programming with guided local search | Broader constraint support, faster initial solutions |
+
+## Results
+
+### Prediction Accuracy
+
+| Model | MAE | RMSE | MAPE | R² |
+|-------|-----|------|------|----|
+| **LightGBM** | **3.97 min** | **5.95 min** | **31.1%** | **0.81** |
+| Random Forest | 4.41 min | 6.55 min | 34.6% | 0.77 |
+
+*Evaluated on 1.42 million held-out test trips. MAE = Mean Absolute Error, RMSE = Root Mean Squared Error, MAPE = Mean Absolute Percentage Error, R² = how much variance the model explains (1.0 = perfect).*
+
+LightGBM outperforms the Random Forest baseline across all metrics, predicting trip duration with an average error of about 4 minutes.
+
+### Route Quality Improvement
+
+When comparing routes planned with ML-adjusted travel times versus static estimates, the system shows **10–25% improvement in total travel time** during peak congestion periods. The benefit is largest during rush hours (7–9 AM, 4–7 PM) when the gap between static estimates and reality is widest.
+
+## System Architecture
 
 ```
                   ┌─────────────┐
                   │  Streamlit   │  :8501
-                  │  Frontend    │
+                  │  Web UI      │
                   └──────┬──────┘
                          │
                   ┌──────▼──────┐
@@ -18,134 +108,16 @@ The core idea: instead of feeding static travel times into a route optimizer, tr
                   └──┬───────┬──┘
                      │       │
               ┌──────▼──┐ ┌──▼────────┐
-              │  OSRM   │ │ LightGBM  │
-              │  Server  │ │ ETA Model │
-              │  :5000   │ └───────────┘
-              └─────────┘
+              │  OSRM    │ │ LightGBM  │
+              │  Routing  │ │ ML Model  │
+              │  :5000    │ └───────────┘
+              └──────────┘
 ```
 
-**Pipeline:** OSRM base travel times → ML-adjusted cost matrix → VRP solver → optimized routes
-
-## Prerequisites
-
-- **Python 3.12+**
-- **[uv](https://docs.astral.sh/uv/)** (package manager)
-- **Docker** (for OSRM routing engine)
-
-## Quick Start
-
-### 1. Install dependencies
-
-```bash
-uv sync --dev
-```
-
-### 2. Set up OSRM
-
-Download and preprocess an OpenStreetMap extract, then start the routing server:
-
-```bash
-mkdir -p data/external/osrm && cd data/external/osrm
-
-# Download OSM extract (New York State example)
-wget https://download.geofabrik.de/north-america/us/new-york-latest.osm.pbf
-
-# Preprocess for OSRM
-docker run -t -v "${PWD}:/data" ghcr.io/project-osrm/osrm-backend \
-  osrm-extract -p /opt/car.lua /data/new-york-latest.osm.pbf
-docker run -t -v "${PWD}:/data" ghcr.io/project-osrm/osrm-backend \
-  osrm-partition /data/new-york-latest.osrm
-docker run -t -v "${PWD}:/data" ghcr.io/project-osrm/osrm-backend \
-  osrm-customize /data/new-york-latest.osrm
-```
-
-Start OSRM (or use Docker Compose, see below):
-
-```bash
-docker run -d -p 5000:5000 -v "${PWD}:/data" \
-  ghcr.io/project-osrm/osrm-backend \
-  osrm-routed --algorithm mld --max-table-size 10000 /data/new-york-latest.osrm
-```
-
-Verify: `curl http://localhost:5000/health`
-
-### 3. Process data and train models
-
-```bash
-# Download NYC TLC trip data (Parquet files) into data/raw/nyc_tlc/
-# See https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
-
-# Process raw data (requires running OSRM)
-uv run python scripts/process_data.py
-
-# Train ETA models
-uv run python scripts/train_model.py
-```
-
-### 4. Run the application
-
-**Option A: Docker Compose (full stack)**
-
-```bash
-docker compose up
-```
-
-This starts OSRM (:5000), the API (:8000), and the frontend (:8501).
-
-**Option B: Run services individually**
-
-```bash
-# API server
-uv run uvicorn api.main:app --reload --port 8000
-
-# Streamlit frontend (in another terminal)
-uv run streamlit run frontend/app.py
-```
-
-The API starts without an ML model if none is found — it will use static OSRM times only.
-
-## API Usage
-
-### Submit an optimization job
-
-```bash
-curl -X POST http://localhost:8000/api/optimize \
-  -H "Content-Type: application/json" \
-  -d '{
-    "depot": {"lat": 40.7484, "lng": -73.9857},
-    "stops": [
-      {"id": "S1", "lat": 40.7580, "lng": -73.9855, "demand": 5},
-      {"id": "S2", "lat": 40.7614, "lng": -73.9776, "demand": 3},
-      {"id": "S3", "lat": 40.7527, "lng": -73.9772, "demand": 8}
-    ],
-    "vehicles": [
-      {"id": "V1", "capacity": 50},
-      {"id": "V2", "capacity": 50}
-    ],
-    "config": {
-      "use_ml": true,
-      "solver": "pyvrp",
-      "max_solve_time_seconds": 30
-    }
-  }'
-```
-
-Returns `202 Accepted` with a `job_id`.
-
-### Poll for results
-
-```bash
-curl http://localhost:8000/api/optimize/{job_id}
-```
-
-### Other endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/optimize` | POST | Submit optimization job |
-| `/api/optimize/{job_id}` | GET | Poll job status/result |
-| `/api/predict` | POST | Predict ETA between two points |
-| `/api/health` | GET | System health check |
+The system runs three services:
+- **Streamlit Web UI** (port 8501) — the interactive interface for planning and visualizing routes
+- **FastAPI Backend** (port 8000) — handles optimization requests, runs the ML model, coordinates with the routing engine
+- **OSRM Routing Engine** (port 5000) — computes driving directions and travel times using real road network data
 
 ## Web UI Guide
 
@@ -190,82 +162,48 @@ Read-only overview of system health and model performance:
 - **System Status** — OSRM connection, ML model loaded, active jobs count
 - **Model Performance** — MAE, RMSE, MAPE, R² for the LightGBM model
 - **Model Comparison** — LightGBM vs Random Forest metrics table
-- **Feature Importance** — SHAP plot showing which features matter most for ETA prediction
-
-## Configuration
-
-Settings are managed via environment variables with prefix `LMO_` and nested delimiter `__`:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LMO_OSRM__BASE_URL` | `http://localhost:5000` | OSRM server URL |
-| `LMO_OSRM__TIMEOUT` | `30` | OSRM request timeout (seconds) |
-| `LMO_SOLVER__DEFAULT_SOLVER` | `pyvrp` | Default VRP solver (`pyvrp` or `ortools`) |
-| `LMO_SOLVER__MAX_RUNTIME` | `30` | Max VRP solve time (seconds) |
-
-Model hyperparameters are in `configs/model_config.yaml`, solver defaults in `configs/solver_config.yaml`.
-
-## Development
-
-```bash
-# Run all tests
-uv run pytest
-
-# Run unit tests only (no OSRM required)
-uv run pytest -m "not integration"
-
-# Run a single test file
-uv run pytest tests/unit/test_vrp_solver.py -v
-
-# Lint and format check
-uv run ruff check .
-uv run ruff format --check .
-
-# Auto-fix lint issues
-uv run ruff check --fix .
-uv run ruff format .
-```
+- **Feature Importance** — SHAP plot showing which features matter most for travel time prediction
 
 ## Project Structure
 
 ```
-├── api/                    # FastAPI REST API
-│   ├── main.py             # App setup, lifespan, middleware
-│   ├── routers/            # Endpoint handlers
-│   └── schemas/            # Pydantic request/response models
+├── api/                    # Backend REST API
+│   ├── main.py             # App setup and startup
+│   ├── routers/            # API endpoint handlers
+│   └── schemas/            # Request/response data models
 ├── src/                    # Core library
-│   ├── data/               # Data loading and preprocessing
+│   ├── data/               # Data loading and cleaning
 │   ├── features/           # Feature engineering pipeline
 │   ├── models/             # ML training, evaluation, prediction
-│   ├── optimization/       # OSRM client, cost matrix, VRP solvers
-│   └── utils/              # Config, geo utilities
-├── frontend/               # Streamlit web UI
+│   ├── optimization/       # Routing engine client, cost matrix, VRP solvers
+│   └── utils/              # Configuration, geo utilities
+├── frontend/               # Streamlit web interface
 │   ├── app.py              # Entry point
 │   ├── pages/              # Optimize, Compare, Dashboard views
 │   └── components/         # Map display components
-├── scripts/                # CLI scripts for data processing and training
-├── configs/                # YAML configuration files
-├── tests/                  # Unit and integration tests
-├── docker/                 # Dockerfiles for API and frontend
-└── doc/                    # Research and implementation documentation
+├── scripts/                # Data download, processing, and training scripts
+├── configs/                # Configuration files (model hyperparameters, solver settings)
+├── tests/                  # Automated tests
+├── docker/                 # Container build files
+└── doc/                    # Research documentation
 ```
 
-## VRP Solvers
+## Getting Started
 
-Two solvers are available, sharing the same interface:
+See [SETUP.md](SETUP.md) for detailed installation and setup instructions.
 
-- **PyVRP** (default) — Hybrid Genetic Search algorithm. State-of-the-art solution quality (<2% gap from optimal on benchmarks). Supports CVRPTW (capacitated VRP with time windows).
-- **OR-Tools** — Google's constraint programming solver with Guided Local Search. Broader constraint support including pickup-delivery pairs. Good solution quality (5-15% gap).
-
-## Evaluation
+**Quick version:** Install Python 3.12+, [uv](https://docs.astral.sh/uv/), and [Docker](https://www.docker.com/). Then:
 
 ```bash
-# Compare solvers on Solomon VRPTW benchmark instances
-uv run python scripts/run_solver_comparison.py
-
-# Run full evaluation pipeline
-uv run python scripts/run_evaluation.py
+uv sync --dev                          # Install dependencies
+bash scripts/setup_osrm.sh             # Set up the routing engine
+bash scripts/download_data.sh           # Download training data
+uv run python scripts/process_data.py   # Process data
+uv run python scripts/train_model.py    # Train ML model
+docker compose up                       # Start all services
 ```
+
+Open http://localhost:8501 to use the web interface.
 
 ## License
 
